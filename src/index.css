@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* Leaflet требует явных размеров контейнера */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+}
+
+/* Кастомная метка пользователя */
+.user-marker {
+  background: transparent;
+  border: none;
+}
