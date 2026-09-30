@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/culture/:path*",
+      "destination": "https://www.culture.ru/:path*"
+    }
+  ]
+}
