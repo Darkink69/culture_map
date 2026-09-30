@@ -7,7 +7,11 @@ import {
   CACHE_TTL_MS,
 } from "../utils/eventsCache";
 import { hasEventCoords } from "../utils/coordsCache";
-import { enqueueEventCoords } from "../utils/geocodeQueue";
+import {
+  enqueueEventCoords,
+  setActiveLocale,
+  stopQueue,
+} from "../utils/geocodeQueue";
 
 const BASE = "/culture";
 const PAGE_SIZE = 100;
@@ -19,6 +23,9 @@ const log = (...a: unknown[]) => console.log(LOG_PREFIX, ...a);
 const logWarn = (...a: unknown[]) => console.warn(LOG_PREFIX, ...a);
 const logError = (...a: unknown[]) => console.error(LOG_PREFIX, ...a);
 
+// ---------------------------------------------------------------------------
+// buildId
+// ---------------------------------------------------------------------------
 async function fetchBuildId(): Promise<string> {
   const res = await fetch(`${BASE}/`, { credentials: "omit" });
   if (!res.ok) throw new Error(`Главная: HTTP ${res.status}`);
@@ -30,6 +37,9 @@ async function fetchBuildId(): Promise<string> {
   throw new Error("buildId не найден в HTML");
 }
 
+// ---------------------------------------------------------------------------
+// Одна страница афиши
+// ---------------------------------------------------------------------------
 interface PageResult {
   items: CultureEvent[];
   totalPages: number | null;
@@ -49,7 +59,7 @@ async function fetchPage(
   url.searchParams.set("limit", String(PAGE_SIZE));
   url.searchParams.set("page", String(page));
 
-  log(`Афиша "${locale}", стр. ${page}:`, url.toString());
+  log(`Афиша "${locale}", стр. ${page}`);
 
   const res = await fetch(url.toString(), { credentials: "omit", signal });
   if (!res.ok) throw new Error(`Афиша стр. ${page}: HTTP ${res.status}`);
@@ -70,6 +80,19 @@ async function fetchPage(
   );
 
   return { items, totalPages };
+}
+
+// ---------------------------------------------------------------------------
+// Очередь координат
+// ---------------------------------------------------------------------------
+function enqueueMissing(events: CultureEvent[], locale: string): number {
+  let n = 0;
+  for (const ev of events) {
+    if (hasEventCoords(ev._id)) continue;
+    enqueueEventCoords(ev._id, locale);
+    n++;
+  }
+  return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +128,7 @@ async function loadAllEvents(
   const promise = (async () => {
     const t0 = performance.now();
 
+    // --- Кэш ---
     if (!force) {
       const cached = readCache(locale);
       if (cached) {
@@ -113,14 +137,19 @@ async function loadAllEvents(
             `свежий (< ${formatAge(CACHE_TTL_MS)}): ${cached.isFresh}, ` +
             `событий: ${cached.events.length}`,
         );
+
+        // Очередь — до onPartial
+        const queued = enqueueMissing(cached.events, locale);
+        if (queued > 0)
+          log(`"${locale}" в очередь координат из кэша: ${queued}`);
+
+        onPartial?.(cached.events);
+
         if (cached.isFresh) {
-          log(`"${locale}" использую кэш`);
-          onPartial?.(cached.events);
-          const queued = enqueueMissing(cached.events);
-          if (queued > 0) log(`В очередь координат из кэша: ${queued}`);
+          log(`"${locale}" кэш свежий — сеть не трогаю`);
           return cached.events;
         }
-        log(`"${locale}" кэш устарел — обновляю`);
+        log(`"${locale}" кэш устарел — обновляю из сети`);
       } else {
         log(`"${locale}" кэша нет — гружу из сети`);
       }
@@ -128,13 +157,14 @@ async function loadAllEvents(
       log(`"${locale}" форсированное обновление`);
     }
 
+    // --- Сеть ---
     const buildId = await fetchBuildId();
     log("buildId =", buildId);
 
-    // Первая страница
     const first = await fetchPage(buildId, locale, 1, signal);
     const all: CultureEvent[] = [...first.items];
-    enqueueMissing(all);
+
+    enqueueMissing(all, locale);
     writeCache(locale, all);
     onPartial?.([...all]);
 
@@ -146,7 +176,7 @@ async function loadAllEvents(
 
     for (let page = 2; page <= totalPages; page++) {
       if (signal.aborted) {
-        log(`"${locale}" abort на странице ${page}`);
+        log(`"${locale}" abort на стр. ${page}`);
         onStop?.();
         break;
       }
@@ -154,11 +184,11 @@ async function loadAllEvents(
       try {
         const { items } = await fetchPage(buildId, locale, page, signal);
         if (items.length === 0) {
-          log(`"${locale}" страница ${page} пуста — стоп`);
+          log(`"${locale}" стр. ${page} пуста — стоп`);
           break;
         }
         all.push(...items);
-        enqueueMissing(items);
+        enqueueMissing(items, locale);
         writeCache(locale, all);
         onPartial?.([...all]);
         onProgress?.(page, totalPages);
@@ -170,6 +200,7 @@ async function loadAllEvents(
         }
         logWarn(`"${locale}" стр. ${page} упала:`, e);
       }
+
       await new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
     }
 
@@ -191,23 +222,16 @@ async function loadAllEvents(
   }
 }
 
-function enqueueMissing(events: CultureEvent[]): number {
-  let n = 0;
-  for (const ev of events) {
-    if (hasEventCoords(ev._id)) continue;
-    enqueueEventCoords(ev._id, "", "");
-    n++;
+/** Остановить загрузку афиши и очередь координат. */
+export function stopAll(locale: string | null): void {
+  if (locale) {
+    const ctrl = aborters.get(locale);
+    if (ctrl) {
+      console.log(`[culture.ru] Abort загрузки афиши "${locale}"`);
+      ctrl.abort();
+    }
   }
-  return n;
-}
-
-/** Остановить загрузку для локали. */
-export function stopLoading(locale: string): void {
-  const ctrl = aborters.get(locale);
-  if (ctrl) {
-    console.log(`[culture.ru] Останавливаю загрузку для "${locale}"`);
-    ctrl.abort();
-  }
+  stopQueue();
 }
 
 // ---------------------------------------------------------------------------
@@ -240,9 +264,27 @@ export function useCultureEvents(
 
   const forceRef = useRef(false);
   const mountedRef = useRef(true);
+  const prevLocaleRef = useRef<string | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
+
+    // ------- Смена локали: останавливаем всё старое -------
+    const prev = prevLocaleRef.current;
+    if (prev !== locale) {
+      if (prev) {
+        console.log(`[hook] Локаль сменилась: ${prev} → ${locale}`);
+        // 1. Отменяем загрузку афиши прошлой локали
+        const ctrl = aborters.get(prev);
+        if (ctrl) {
+          console.log(`[hook] Abort афиши "${prev}"`);
+          ctrl.abort();
+        }
+      }
+      // 2. Переключаем очередь координат: старые каналы стираются
+      setActiveLocale(locale);
+      prevLocaleRef.current = locale;
+    }
 
     if (!locale) {
       setEvents([]);
@@ -255,6 +297,7 @@ export function useCultureEvents(
     forceRef.current = false;
     setStopped(false);
 
+    // Мгновенный показ кэша
     if (!force) {
       const cached = readCache(locale);
       if (cached?.events?.length) {
@@ -272,11 +315,14 @@ export function useCultureEvents(
       maxPages,
       onPartial: (partial) => {
         if (!mountedRef.current) return;
+        // защита от гонки: игнорируем колбэки от неактуальной локали
+        if (prevLocaleRef.current !== locale) return;
         setEvents(partial);
         setFromCache(false);
       },
       onProgress: (loaded, total) => {
         if (!mountedRef.current) return;
+        if (prevLocaleRef.current !== locale) return;
         setProgress({ loaded, total });
       },
       onStop: () => {
@@ -287,6 +333,7 @@ export function useCultureEvents(
     })
       .then((result) => {
         if (!mountedRef.current) return;
+        if (prevLocaleRef.current !== locale) return;
         setEvents(result);
         setLastUpdated(Date.now());
         setFromCache(false);
@@ -294,14 +341,17 @@ export function useCultureEvents(
       .catch((err) => {
         if (!mountedRef.current) return;
         if (err instanceof Error && err.name === "AbortError") {
-          setStopped(true);
+          // отмена из-за смены локали — не показываем ошибку
           return;
         }
+        if (prevLocaleRef.current !== locale) return;
         logError("Ошибка:", err);
         setError(err instanceof Error ? err.message : "Неизвестная ошибка");
       })
       .finally(() => {
-        if (mountedRef.current) setLoading(false);
+        if (mountedRef.current && prevLocaleRef.current === locale) {
+          setLoading(false);
+        }
       });
 
     return () => {
@@ -315,7 +365,8 @@ export function useCultureEvents(
   };
 
   const stop = () => {
-    if (locale) stopLoading(locale);
+    stopAll(locale);
+    setStopped(true);
   };
 
   return {

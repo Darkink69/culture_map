@@ -1,5 +1,12 @@
 import { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Circle, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Circle,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 import L from "leaflet";
 import type { GeolocationState } from "../hooks/useGeolocation";
 import type { CultureEvent } from "../types/culture";
@@ -47,11 +54,45 @@ function RecenterMap({
   return null;
 }
 
+function ClickHandler({
+  onClick,
+}: {
+  onClick: (lat: number, lng: number) => void;
+}) {
+  useMapEvents({
+    click(e) {
+      onClick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
+
+function FocusMap({ center }: { center: [number, number] | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center) map.flyTo(center, 12, { duration: 1.2 });
+  }, [center, map]);
+  return null;
+}
+
+interface MapViewProps {
+  location: GeolocationState;
+  events: CultureEvent[];
+  onSelectEvent: (e: CultureEvent) => void;
+  autoCenter?: boolean;
+  /** Центр карты (для переезда к выбранной локали) */
+  focusCenter?: [number, number] | null;
+  /** Обработчик клика по карте */
+  onMapClick?: (lat: number, lng: number) => void;
+}
+
 export default function MapView({
   location,
   events,
   onSelectEvent,
   autoCenter = false,
+  focusCenter = null,
+  onMapClick,
 }: MapViewProps) {
   const { latitude, longitude, accuracy } = location;
   const center: [number, number] =
@@ -77,6 +118,8 @@ export default function MapView({
         longitude={longitude}
         enabled={autoCenter}
       />
+      <FocusMap center={focusCenter} />
+      {onMapClick && <ClickHandler onClick={onMapClick} />}
 
       <EventMarkers events={events} onSelect={onSelectEvent} />
 

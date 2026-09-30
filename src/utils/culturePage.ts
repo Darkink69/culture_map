@@ -1,13 +1,14 @@
 const BASE = "/culture";
 
+/**
+ * Загружает HTML страницы события /events/{id} и извлекает координаты
+ * из встроенного __NEXT_DATA__.
+ */
 export async function fetchEventCoords(
-  _buildId: string,
   eventId: number,
-  _locale: string,
   signal?: AbortSignal,
 ): Promise<[number, number] | null> {
-  // ВАЖНО: путь начинается с /culture, чтобы Vite-прокси отправил его на culture.ru.
-  // Без префикса Vite вернёт index.html нашего приложения (618 байт).
+  // ВАЖНО: путь через /culture — Vite-прокси отправит его на culture.ru.
   const url = `${BASE}/events/${eventId}`;
   console.log(`[page] GET ${url}`);
 
@@ -26,6 +27,16 @@ export async function fetchEventCoords(
 
   const html = await res.text();
   console.log(`[page] #${eventId} HTML size = ${html.length}`);
+
+  // Защита: если прокси не сработал, придёт HTML нашего index.html (~600 б)
+  if (html.length < 5000) {
+    console.warn(
+      `[page] #${eventId} HTML слишком маленький (${html.length} б) — ` +
+        `вероятно, прокси не настроен`,
+    );
+    console.warn(`[page] #${eventId} head:`, html.slice(0, 200));
+    return null;
+  }
 
   const match = html.match(
     /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/,
@@ -57,10 +68,17 @@ export async function fetchEventCoords(
   return coords;
 }
 
+/**
+ * Рекурсивно ищет первый объект вида
+ * { location: { type: "Point", coordinates: [lng, lat] } }
+ * или просто { type: "Point", coordinates: [lng, lat] }.
+ */
 function findCoords(node: unknown, depth = 0): [number, number] | null {
   if (!node || typeof node !== "object" || depth > 12) return null;
+
   const n = node as Record<string, unknown>;
 
+  // 1. node.location = { type: 'Point', coordinates: [...] }
   const loc = n.location as
     | { type?: string; coordinates?: unknown }
     | undefined;
@@ -75,6 +93,7 @@ function findCoords(node: unknown, depth = 0): [number, number] | null {
     return [loc.coordinates[0], loc.coordinates[1]];
   }
 
+  // 2. node сам = { type: 'Point', coordinates: [...] }
   if (
     n.type === "Point" &&
     Array.isArray(n.coordinates) &&

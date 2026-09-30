@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import MapView from "./components/MapView";
 import EventModal from "./components/EventModal";
 import ProgressPanel from "./components/ProgressPanel";
+import Splash from "./components/Splash";
+import HintPopup from "./components/HintPopup";
 import { useGeolocation } from "./hooks/useGeolocation";
-import { useDetectedLocale } from "./hooks/useDetectedLocale";
+import { useMapLocale } from "./hooks/useMapLocale";
 import { useCultureEvents } from "./hooks/useCultureEvents";
 import { CATEGORY_CONFIG } from "./utils/eventCategory";
 import type { CultureEvent } from "./types/culture";
 
 export default function App() {
   const location = useGeolocation();
-  const detected = useDetectedLocale(location.latitude, location.longitude);
+  const mapLocale = useMapLocale();
 
   const {
     events,
@@ -22,10 +24,36 @@ export default function App() {
     refresh,
     stop,
     stopped,
-  } = useCultureEvents(detected.locale?.sysName ?? null);
+  } = useCultureEvents(mapLocale.locale?.sysName ?? null);
 
   const [selected, setSelected] = useState<CultureEvent | null>(null);
   const [autoCenter, setAutoCenter] = useState(true);
+  const [focusCenter, setFocusCenter] = useState<[number, number] | null>(null);
+
+  // Обработка клика по карте — установить локаль
+  const handleMapClick = async (lat: number, lng: number) => {
+    setFocusCenter([lat, lng]);
+    await mapLocale.setLocaleByCoords(lat, lng);
+  };
+
+  // При смене локали — центрируем карту на её примерный центр
+  // (у нас нет координат центра локали, поэтому используем клик-центр
+  //  или координаты пользователя)
+  useEffect(() => {
+    if (mapLocale.userLat && mapLocale.userLng && autoCenter) {
+      setFocusCenter([mapLocale.userLat, mapLocale.userLng]);
+    }
+  }, [mapLocale.userLat, mapLocale.userLng, autoCenter]);
+
+  useEffect(() => {
+    if (mapLocale.center) {
+      setFocusCenter(mapLocale.center);
+    }
+  }, [mapLocale.center]);
+
+  // Показываем splash, пока нет локали ИЛИ она ещё инициализируется
+  const splashVisible =
+    mapLocale.locale === null || (mapLocale.loading && !mapLocale.locale);
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
@@ -34,19 +62,14 @@ export default function App() {
         events={events}
         onSelectEvent={setSelected}
         autoCenter={autoCenter}
+        focusCenter={focusCenter}
+        onMapClick={handleMapClick}
       />
 
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-1000 w-[min(92vw,620px)]">
-        <div className="bg-white/95 backdrop-blur-sm shadow-lg rounded-lg px-4 py-2 text-sm text-gray-800">
-          {detected.loading && (
-            <div className="text-gray-700">Определение города по GPS...</div>
-          )}
-          {!detected.loading && !detected.locale && (
-            <div className="text-red-600">
-              Не удалось определить город. Проверьте доступ к геолокации.
-            </div>
-          )}
-          {detected.locale && (
+      {/* Верхняя панель — прогресс, только если локаль определена */}
+      {mapLocale.locale && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-1000 w-[min(92vw,620px)]">
+          <div className="bg-white/95 backdrop-blur-sm shadow-lg rounded-lg px-4 py-2 text-sm text-gray-800">
             <ProgressPanel
               loading={loading}
               stopped={stopped}
@@ -55,17 +78,31 @@ export default function App() {
               progress={progress}
               fromCache={fromCache}
               lastUpdated={lastUpdated}
-              localeTitle={detected.locale.title}
+              localeTitle={mapLocale.locale.title}
               onRefresh={() => refresh({ force: true })}
               onStop={stop}
             />
-          )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Ошибка определения локали */}
+      {mapLocale.error && !loading && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-1000 w-[min(92vw,620px)]">
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm">
+            {mapLocale.error}
+          </div>
+        </div>
+      )}
 
       {/* Кнопка «Где я» */}
       <button
-        onClick={() => setAutoCenter(true)}
+        onClick={() => {
+          setAutoCenter(true);
+          if (mapLocale.userLat && mapLocale.userLng) {
+            setFocusCenter([mapLocale.userLat, mapLocale.userLng]);
+          }
+        }}
         className="absolute bottom-6 right-6 z-1000 bg-white shadow-lg rounded-full w-12 h-12 flex items-center justify-center hover:bg-gray-50 active:scale-95 transition"
         title="Центрировать на моём местоположении"
       >
@@ -83,6 +120,7 @@ export default function App() {
         </svg>
       </button>
 
+      {/* Легенда */}
       <div className="absolute bottom-6 left-6 z-1000 bg-white/95 backdrop-blur-sm shadow-lg rounded-lg px-3 py-2 text-xs">
         <div className="font-semibold mb-1 text-gray-700">Типы событий</div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
@@ -99,6 +137,20 @@ export default function App() {
       </div>
 
       <EventModal event={selected} onClose={() => setSelected(null)} />
+
+      <Splash
+        visible={splashVisible}
+        message={
+          mapLocale.loading
+            ? "Определение местоположения..."
+            : "Подключение к GPS..."
+        }
+      />
+
+      <HintPopup
+        visible={mapLocale.showFirstTimeHint}
+        onClose={mapLocale.dismissHint}
+      />
     </div>
   );
 }
