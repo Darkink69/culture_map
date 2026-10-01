@@ -27,14 +27,52 @@ const logError = (...a: unknown[]) => console.error(LOG_PREFIX, ...a);
 // buildId
 // ---------------------------------------------------------------------------
 async function fetchBuildId(): Promise<string> {
-  const res = await fetch(`${BASE}/`, { credentials: "omit" });
-  if (!res.ok) throw new Error(`Главная: HTTP ${res.status}`);
+  const url = `${BASE}/`;
+  console.log("[buildId] GET", url);
+
+  const res = await fetch(url, { credentials: "omit" });
+  console.log(
+    "[buildId] HTTP",
+    res.status,
+    "content-type:",
+    res.headers.get("content-type"),
+  );
+
   const html = await res.text();
-  const match = html.match(/"buildId"\s*:\s*"([^"]+)"/);
-  if (match) return match[1];
-  const alt = html.match(/\\"buildId\\"\s*:\s*\\"([^"\\]+)\\"/);
-  if (alt) return alt[1];
-  throw new Error("buildId не найден в HTML");
+  console.log("[buildId] Длина HTML:", html.length);
+  console.log("[buildId] Последние 500 символов:", html.slice(-500));
+
+  // Способ 1 — из путей _buildManifest.js
+  const m1 = html.match(
+    /\/frontend-next\/_next\/static\/([^/]+)\/_buildManifest\.js/,
+  );
+  if (m1) {
+    console.log("[buildId] найден через _buildManifest:", m1[1]);
+    return m1[1];
+  }
+
+  // Способ 2 — классический buildId
+  const m2 = html.match(/"buildId"\s*:\s*"([^"]+)"/);
+  if (m2) {
+    console.log("[buildId] найден через JSON:", m2[1]);
+    return m2[1];
+  }
+
+  // Способ 3 — любой _next/data/{id}/
+  const m3 = html.match(/_next\/data\/([A-Za-z0-9_-]+)\//);
+  if (m3) {
+    console.log("[buildId] найден через _next/data:", m3[1]);
+    return m3[1];
+  }
+
+  // Способ 4 — из JSON внутри __NEXT_DATA__
+  const m4 = html.match(/"buildId":"([A-Za-z0-9_-]+)"/);
+  if (m4) {
+    console.log("[buildId] найден через __NEXT_DATA__:", m4[1]);
+    return m4[1];
+  }
+
+  throw new Error(`buildId не найден в HTML (длина ${html.length})`);
 }
 
 // ---------------------------------------------------------------------------
