@@ -1,40 +1,55 @@
 const BASE = "/culture";
 
 /**
- * Загружает HTML страницы события /events/{id} и извлекает координаты
- * из встроенного __NEXT_DATA__.
+ * Загружает HTML страницы события и извлекает координаты из __NEXT_DATA__.
+ *
+ * ВАЖНО: culture.ru на /events/{id} отвечает 308 → /events/{id}/{slug}.
+ * Nginx-прокси переписывает Location обратно на /culture/...,
+ * поэтому fetch с redirect: "follow" спокойно идёт по цепочке,
+ * оставаясь на нашем origin.
  */
 export async function fetchEventCoords(
   eventId: number,
+  eventName: string,
   signal?: AbortSignal,
 ): Promise<[number, number] | null> {
-  // ВАЖНО: путь через /culture — Vite-прокси отправит его на culture.ru.
-  const url = `${BASE}/events/${eventId}`;
+  const url = `${BASE}/events/${eventId}/${eventName}`;
   console.log(`[page] GET ${url}`);
 
   let res: Response;
   try {
-    res = await fetch(url, { signal, credentials: "omit" });
+    res = await fetch(url, {
+      signal,
+      credentials: "omit",
+      redirect: "follow",
+    });
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") throw e;
     console.warn(`[page] #${eventId} fetch error:`, e);
     return null;
   }
 
-  console.log(`[page] #${eventId} HTTP ${res.status}`);
+  console.log(`[page] #${eventId} HTTP ${res.status} (final url: ${res.url})`);
 
   if (!res.ok) return null;
 
   const html = await res.text();
   console.log(`[page] #${eventId} HTML size = ${html.length}`);
 
-  // Защита: если прокси не сработал, придёт HTML нашего index.html (~600 б)
+  // Защита: если прокси не сработал, придёт наш index.html (~600 б)
   if (html.length < 5000) {
     console.warn(
       `[page] #${eventId} HTML слишком маленький (${html.length} б) — ` +
-        `вероятно, прокси не настроен`,
+        `прокси не сработал или редирект ушёл мимо`,
     );
     console.warn(`[page] #${eventId} head:`, html.slice(0, 200));
+    return null;
+  }
+
+  // Признак HTML culture.ru
+  if (!html.includes("__NEXT_DATA__")) {
+    console.warn(`[page] #${eventId} нет __NEXT_DATA__ — не тот HTML`);
+    console.warn(`[page] #${eventId} head:`, html.slice(0, 300));
     return null;
   }
 
@@ -42,14 +57,9 @@ export async function fetchEventCoords(
     /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/,
   );
   if (!match) {
-    console.warn(`[page] #${eventId} __NEXT_DATA__ не найден в HTML`);
-    console.warn(`[page] #${eventId} HTML head:`, html.slice(0, 300));
+    console.warn(`[page] #${eventId} __NEXT_DATA__ не распарсился`);
     return null;
   }
-
-  console.log(
-    `[page] #${eventId} __NEXT_DATA__ найден, длина JSON = ${match[1].length}`,
-  );
 
   let json: unknown;
   try {
@@ -71,14 +81,13 @@ export async function fetchEventCoords(
 /**
  * Рекурсивно ищет первый объект вида
  * { location: { type: "Point", coordinates: [lng, lat] } }
- * или просто { type: "Point", coordinates: [lng, lat] }.
+ * или { type: "Point", coordinates: [lng, lat] }.
  */
 function findCoords(node: unknown, depth = 0): [number, number] | null {
   if (!node || typeof node !== "object" || depth > 12) return null;
 
   const n = node as Record<string, unknown>;
 
-  // 1. node.location = { type: 'Point', coordinates: [...] }
   const loc = n.location as
     | { type?: string; coordinates?: unknown }
     | undefined;
@@ -93,7 +102,6 @@ function findCoords(node: unknown, depth = 0): [number, number] | null {
     return [loc.coordinates[0], loc.coordinates[1]];
   }
 
-  // 2. node сам = { type: 'Point', coordinates: [...] }
   if (
     n.type === "Point" &&
     Array.isArray(n.coordinates) &&

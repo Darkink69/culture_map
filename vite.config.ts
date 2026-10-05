@@ -22,6 +22,19 @@ export default defineConfig({
         target: "https://www.culture.ru",
         changeOrigin: true,
       },
+      // ← НОВОЕ
+      "/nominatim": {
+        target: "https://nominatim.openstreetmap.org",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/nominatim/, ""),
+        headers: {
+          // ВАЖНО: Nominatim требует идентификацию.
+          // В деве можно так, но не злоупотребляйте.
+          "User-Agent": "CultureMap/1.0 (contact: abc.chch@gmail.com)",
+          "Accept-Language": "ru",
+          Accept: "application/json",
+        },
+      },
     },
   },
 });

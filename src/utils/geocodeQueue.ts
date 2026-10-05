@@ -3,11 +3,7 @@ import { fetchEventCoords } from "./culturePage";
 
 type Listener = () => void;
 
-/**
- * Очереди по локалям. Ключ — sysName локали, значение — множество eventId.
- * Обрабатывается только очередь активной локали.
- */
-const queues = new Map<string, Set<number>>();
+const queues = new Map<string, Map<number, string>>(); // locale → (id → name)
 const listeners = new Set<Listener>();
 
 let activeLocale: string | null = null;
@@ -18,18 +14,15 @@ let stopped = false;
 const PAGE_REQUEST_DELAY_MS = 300;
 
 /**
- * Установить активную локаль. Если она отличается от текущей —
- * все прочие очереди очищаются, а их запросы прекращаются.
+ * Установить активную локаль. Очереди других локалей очищаются.
  */
 export function setActiveLocale(locale: string | null): void {
   if (activeLocale === locale) return;
   console.log(`[queue] Смена активной локали: ${activeLocale} → ${locale}`);
 
-  // Очищаем все очереди, кроме новой активной
   for (const key of Array.from(queues.keys())) {
     if (key !== locale) {
-      const q = queues.get(key);
-      const size = q?.size ?? 0;
+      const size = queues.get(key)?.size ?? 0;
       if (size > 0) {
         console.log(`[queue] Сбрасываю очередь для "${key}": ${size} задач`);
       }
@@ -44,22 +37,22 @@ export function setActiveLocale(locale: string | null): void {
   if (locale) void startWorker();
 }
 
-export function enqueueEventCoords(eventId: number, locale: string): void {
+export function enqueueEventCoords(
+  eventId: number,
+  eventName: string,
+  locale: string,
+): void {
   if (hasEventCoords(eventId)) return;
   if (!locale) return;
-
-  // Игнорируем задачи для чужих локалей
-  if (activeLocale && locale !== activeLocale) {
-    return;
-  }
+  if (activeLocale && locale !== activeLocale) return;
 
   let q = queues.get(locale);
   if (!q) {
-    q = new Set();
+    q = new Map();
     queues.set(locale, q);
   }
   if (q.has(eventId)) return;
-  q.add(eventId);
+  q.set(eventId, eventName);
   notify();
   void startWorker();
 }
@@ -76,13 +69,11 @@ export function onCoordsUpdated(cb: Listener): () => void {
   };
 }
 
-/** Размер очереди активной локали (или 0, если активной нет). */
 export function getQueueSize(): number {
   if (!activeLocale) return 0;
   return queues.get(activeLocale)?.size ?? 0;
 }
 
-/** Полная остановка. Очищает все очереди. */
 export function stopQueue(): void {
   let total = 0;
   for (const q of queues.values()) total += q.size;
@@ -108,17 +99,12 @@ async function startWorker(): Promise<void> {
     }
 
     const locale = activeLocale;
-    if (!locale) {
-      break;
-    }
+    if (!locale) break;
 
     const q = queues.get(locale);
-    if (!q || q.size === 0) {
-      break;
-    }
+    if (!q || q.size === 0) break;
 
-    // Забираем первый eventId из активной очереди
-    const eventId = q.values().next().value as number | undefined;
+    const [eventId, eventName] = q.entries().next().value as [number, string];
     if (eventId === undefined) break;
     q.delete(eventId);
     notify();
@@ -126,11 +112,7 @@ async function startWorker(): Promise<void> {
     console.log(`[queue] Беру #${eventId} ("${locale}", в очереди ${q.size})`);
 
     try {
-      const coords = await fetchEventCoords(eventId);
-
-      // Проверяем, не сменилась ли локаль, пока мы ходили в сеть.
-      // Если сменилась — координаты всё равно запишем (данные валидны),
-      // но продолжим цикл только для новой локали.
+      const coords = await fetchEventCoords(eventId, eventName);
       setEventCoords(eventId, coords);
 
       if (coords) {
@@ -139,13 +121,16 @@ async function startWorker(): Promise<void> {
         console.warn(`[queue] #${eventId} — координаты не найдены`);
       }
     } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        console.log(`[queue] #${eventId} abort`);
+        break;
+      }
       console.warn(`[queue] #${eventId} ошибка:`, e);
       setEventCoords(eventId, null);
     }
 
     notify();
 
-    // Если локаль поменялась — выходим, новый воркер запустится сам
     if (activeLocale !== locale) {
       console.log("[queue] Локаль сменилась, прерываю текущий воркер");
       break;

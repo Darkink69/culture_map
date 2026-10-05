@@ -103,7 +103,7 @@ function enqueueMissing(events: CultureEvent[], locale: string): number {
   let n = 0;
   for (const ev of events) {
     if (hasEventCoords(ev._id)) continue;
-    enqueueEventCoords(ev._id, locale);
+    enqueueEventCoords(ev._id, ev.name, locale);
     n++;
   }
   return n;
@@ -203,7 +203,7 @@ async function loadAllEvents(
         }
         all.push(...items);
         enqueueMissing(items, locale);
-        writeCache(locale, all);
+        // writeCache убран из цикла — пишем один раз в конце
         onPartial?.([...all]);
         onProgress?.(page, totalPages);
       } catch (e) {

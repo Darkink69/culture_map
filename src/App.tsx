@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import MapView from "./components/MapView";
 import EventModal from "./components/EventModal";
+import IdentifyPopup from "./components/IdentifyPopup";
 import ProgressPanel from "./components/ProgressPanel";
 import Splash from "./components/Splash";
 import HintPopup from "./components/HintPopup";
@@ -29,16 +30,24 @@ export default function App() {
   const [selected, setSelected] = useState<CultureEvent | null>(null);
   const [autoCenter, setAutoCenter] = useState(true);
   const [focusCenter, setFocusCenter] = useState<[number, number] | null>(null);
+  const [identifyPoint, setIdentifyPoint] = useState<[number, number] | null>(
+    null,
+  );
 
-  // Обработка клика по карте — установить локаль
-  const handleMapClick = async (lat: number, lng: number) => {
-    setFocusCenter([lat, lng]);
-    await mapLocale.setLocaleByCoords(lat, lng);
+  // Клик по карте: открываем identify-попап.
+  // Смена локали — через кнопку внутри попапа.
+  const handleMapClick = (lat: number, lng: number) => {
+    setIdentifyPoint([lat, lng]);
   };
 
-  // При смене локали — центрируем карту на её примерный центр
-  // (у нас нет координат центра локали, поэтому используем клик-центр
-  //  или координаты пользователя)
+  const handleShowCityEvents = async () => {
+    if (!identifyPoint) return;
+    const [lat, lng] = identifyPoint;
+    setFocusCenter([lat, lng]);
+    await mapLocale.setLocaleByCoords(lat, lng);
+    setIdentifyPoint(null);
+  };
+
   useEffect(() => {
     if (mapLocale.userLat && mapLocale.userLng && autoCenter) {
       setFocusCenter([mapLocale.userLat, mapLocale.userLng]);
@@ -51,7 +60,6 @@ export default function App() {
     }
   }, [mapLocale.center]);
 
-  // Показываем splash, пока нет локали ИЛИ она ещё инициализируется
   const splashVisible =
     mapLocale.locale === null || (mapLocale.loading && !mapLocale.locale);
 
@@ -60,13 +68,15 @@ export default function App() {
       <MapView
         location={location}
         events={events}
-        onSelectEvent={setSelected}
+        onSelectEvent={(e) => {
+          setIdentifyPoint(null);
+          setSelected(e);
+        }}
         autoCenter={autoCenter}
         focusCenter={focusCenter}
         onMapClick={handleMapClick}
       />
 
-      {/* Верхняя панель — прогресс, только если локаль определена */}
       {mapLocale.locale && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-1000 w-[min(92vw,620px)]">
           <div className="bg-white/95 backdrop-blur-sm shadow-lg rounded-lg px-4 py-2 text-sm text-gray-800">
@@ -86,7 +96,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Ошибка определения локали */}
       {mapLocale.error && !loading && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-1000 w-[min(92vw,620px)]">
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm">
@@ -95,7 +104,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Кнопка «Где я» */}
       <button
         onClick={() => {
           setAutoCenter(true);
@@ -120,7 +128,6 @@ export default function App() {
         </svg>
       </button>
 
-      {/* Легенда */}
       <div className="absolute bottom-6 left-6 z-1000 bg-white/95 backdrop-blur-sm shadow-lg rounded-lg px-3 py-2 text-xs">
         <div className="font-semibold mb-1 text-gray-700">Типы событий</div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
@@ -137,6 +144,15 @@ export default function App() {
       </div>
 
       <EventModal event={selected} onClose={() => setSelected(null)} />
+
+      {identifyPoint && (
+        <IdentifyPopup
+          lat={identifyPoint[0]}
+          lng={identifyPoint[1]}
+          onClose={() => setIdentifyPoint(null)}
+          onShowCityEvents={handleShowCityEvents}
+        />
+      )}
 
       <Splash
         visible={splashVisible}
