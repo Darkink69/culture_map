@@ -10,6 +10,7 @@ import { useMapLocale } from "./hooks/useMapLocale";
 import { useCultureEvents } from "./hooks/useCultureEvents";
 import { CATEGORY_CONFIG } from "./utils/eventCategory";
 import type { CultureEvent } from "./types/culture";
+import { detectLocaleByCoords } from "./utils/detectLocale";
 
 export default function App() {
   const location = useGeolocation();
@@ -30,23 +31,42 @@ export default function App() {
   const [selected, setSelected] = useState<CultureEvent | null>(null);
   const [autoCenter, setAutoCenter] = useState(true);
   const [focusCenter, setFocusCenter] = useState<[number, number] | null>(null);
-  const [identifyPoint, setIdentifyPoint] = useState<[number, number] | null>(
-    null,
-  );
+  const [identifyPoint, setIdentifyPoint] = useState<{
+    lat: number;
+    lng: number;
+    sameLocale: boolean;
+  } | null>(null);
 
   // Клик по карте: открываем identify-попап.
   // Смена локали — через кнопку внутри попапа.
-  const handleMapClick = (lat: number, lng: number) => {
-    setIdentifyPoint([lat, lng]);
+  const handleMapClick = async (lat: number, lng: number) => {
+    // Определяем локаль точки, чтобы понять, совпадает ли она с текущей
+    const currentSys = mapLocale.locale?.sysName ?? null;
+    let sameLocale = true;
+    try {
+      const res = await detectLocaleByCoords(lat, lng);
+      const clickedSys = res.locale?.sysName ?? null;
+      sameLocale = currentSys !== null && clickedSys === currentSys;
+    } catch {
+      // если не определилось — считаем, что локаль другая,
+      // чтобы не потерять возможность переключиться
+      sameLocale = false;
+    }
+    setIdentifyPoint({ lat, lng, sameLocale });
   };
 
   const handleShowCityEvents = async () => {
     if (!identifyPoint) return;
-    const [lat, lng] = identifyPoint;
+    const { lat, lng } = identifyPoint;
     setFocusCenter([lat, lng]);
     await mapLocale.setLocaleByCoords(lat, lng);
     setIdentifyPoint(null);
   };
+
+  const [debug] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("debug") === "1";
+  });
 
   useEffect(() => {
     if (mapLocale.userLat && mapLocale.userLng && autoCenter) {
@@ -78,21 +98,20 @@ export default function App() {
       />
 
       {mapLocale.locale && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-1000 w-[min(92vw,620px)]">
-          <div className="bg-white/95 backdrop-blur-sm shadow-lg rounded-lg px-4 py-2 text-sm text-gray-800">
-            <ProgressPanel
-              loading={loading}
-              stopped={stopped}
-              error={error}
-              events={events}
-              progress={progress}
-              fromCache={fromCache}
-              lastUpdated={lastUpdated}
-              localeTitle={mapLocale.locale.title}
-              onRefresh={() => refresh({ force: true })}
-              onStop={stop}
-            />
-          </div>
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-1000 w-[min(768px,calc(100%-2rem))] flex">
+          <ProgressPanel
+            loading={loading}
+            stopped={stopped}
+            error={error}
+            events={events}
+            progress={progress}
+            fromCache={fromCache}
+            lastUpdated={lastUpdated}
+            localeTitle={mapLocale.locale.title}
+            onRefresh={() => refresh({ force: true })}
+            onStop={stop}
+            debug={debug}
+          />
         </div>
       )}
 
@@ -147,10 +166,13 @@ export default function App() {
 
       {identifyPoint && (
         <IdentifyPopup
-          lat={identifyPoint[0]}
-          lng={identifyPoint[1]}
+          lat={identifyPoint.lat}
+          lng={identifyPoint.lng}
+          isSameLocale={identifyPoint.sameLocale}
           onClose={() => setIdentifyPoint(null)}
-          onShowCityEvents={handleShowCityEvents}
+          onShowCityEvents={
+            identifyPoint.sameLocale ? undefined : handleShowCityEvents
+          }
         />
       )}
 

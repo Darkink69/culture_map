@@ -19,3 +19,44 @@ body,
   background: transparent;
   border: none;
 }
+
+/* Убираем стандартный синий аутлайн при тапе на мобильных */
+button:focus {
+  outline: none;
+}
+button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+@font-face {
+  font-family: 'RazerF5';
+  src: url('/fonts/dehinted-RazerF5-Regular.ttf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'RazerF5_Bold';
+  src: url('/fonts/dehinted-RazerF5-Bold.ttf') format('opentype');
+}
+
+.razer {
+  font-family: 'RazerF5', sans-serif;
+  font-weight: 500;
+  font-style: normal;
+}
+
+.razerBold {
+  font-family: 'RazerF5_Bold', sans-serif;
+}
+
+.leaflet-control-attribution a[href^="https://leaflet"] {
+  display: none !important;
+}
+
+
+.leaflet-control-attribution {
+  font-size: 10px;
+}
