@@ -1,3 +1,4 @@
+// App.tsx
 import { useEffect, useState } from "react";
 import MapView from "./components/MapView";
 import EventModal from "./components/EventModal";

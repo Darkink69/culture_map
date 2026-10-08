@@ -1,14 +1,21 @@
-import type { CultureEvent, CulturePlace } from "../types/culture";
+import type { CultureEvent } from "../types/culture";
 
 /**
- * Оставляем только то, что реально используется:
- * - EventMarkers: _id, genres (для getEventCategory)
- * - EventModal: title, price, seanceEndDate, topPlaceTitle, thumbnailFile,
- *   genres, isPushkinsCard, isPremiere
- * - filterActiveEvents: seanceEndDate
- * Всё остальное (microdata, cardSchedule, nearestSeancePlace, selectedLocalePlace,
- * renderId, urlEventId, eipskEventId, placesCount, ageRestriction, hasBenefits,
- * isAccessible, permanent, pushkinSchedule, date, tags) — вырезаем.
+ * Минимальный набор для рендера:
+ * - _id — ключ маркера и открытия модалки
+ * - title, name — заголовок и слаг
+ * - isPremiere, isPushkinsCard — бейджи
+ * - price — цена
+ * - seanceEndDate — фильтр «активно»
+ * - genres[0].name — категория маркера (getEventCategory)
+ * - thumbnailFile.publicId — картинка в модалке
+ * - topPlaceTitle — название места в модалке
+ *
+ * НЕ сохраняем:
+ * - places (координаты всё равно null, а объём огромный)
+ * - tags, microdata, cardSchedule, selectedLocalePlace, nearestSeancePlace,
+ *   renderId, urlEventId, eipskEventId, placesCount, ageRestriction,
+ *   hasBenefits, isAccessible, permanent, pushkinSchedule, date
  */
 export function compactEvent(e: CultureEvent): CultureEvent {
   return {
@@ -19,11 +26,16 @@ export function compactEvent(e: CultureEvent): CultureEvent {
     isPushkinsCard: e.isPushkinsCard,
     price: e.price,
     seanceEndDate: e.seanceEndDate,
-    genres: e.genres?.map((g) => ({
-      _id: g._id,
-      name: g.name,
-      title: g.title,
-    })),
+    // только первый жанр — этого достаточно для getEventCategory
+    genres: e.genres?.[0]
+      ? [
+          {
+            _id: e.genres[0]._id,
+            name: e.genres[0].name,
+            title: e.genres[0].title,
+          },
+        ]
+      : undefined,
     thumbnailFile: e.thumbnailFile
       ? {
           _id: e.thumbnailFile._id,
@@ -35,18 +47,7 @@ export function compactEvent(e: CultureEvent): CultureEvent {
         }
       : undefined,
     topPlaceTitle: e.topPlaceTitle,
-    places: e.places?.map(compactPlace),
   } as CultureEvent;
-}
-
-function compactPlace(p: CulturePlace): CulturePlace {
-  return {
-    _id: p._id,
-    title: p.title,
-    address: p.address,
-    eventId: p.eventId,
-    location: p.location,
-  };
 }
 
 export function compactEvents(events: CultureEvent[]): CultureEvent[] {

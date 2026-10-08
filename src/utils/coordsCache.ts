@@ -1,20 +1,17 @@
 const COORDS_KEY = "culture.ru:event-coords";
-// Версия 2: схема {v, ts}. Старые null-ы инвалидируются автоматически.
-const COORDS_VERSION = 2;
-// null перепроверяем раз в 6 часов
-const RETRY_NULL_MS = 6 * 60 * 60 * 1000;
+// Версия 3: успешные координаты без ts, null-ы с ts
+const COORDS_VERSION = 3;
+// null перепроверяем раз в 30 дней
+const RETRY_NULL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type Coords = [number, number];
 
-interface CoordsEntry {
-  v: Coords | null;
-  ts: number;
-}
-
 interface CoordsStore {
   version: number;
-  /** eventId → { v: [lng, lat] | null, ts: timestamp } */
-  coords: Record<string, CoordsEntry>;
+  /** id → [lng, lat] для успешных */
+  coords: Record<string, Coords>;
+  /** id → timestamp последней неудачной попытки */
+  failed: Record<string, number>;
 }
 
 let cache: CoordsStore | null = null;
@@ -25,16 +22,24 @@ function load(): CoordsStore {
     const raw = localStorage.getItem(COORDS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as CoordsStore;
-      if (parsed?.version === COORDS_VERSION && parsed?.coords) {
+      if (
+        parsed?.version === COORDS_VERSION &&
+        parsed?.coords &&
+        parsed?.failed
+      ) {
         cache = parsed;
         return parsed;
       }
-      console.warn("[coords] Старая версия кэша, сбрасываю");
+      console.log("[coords] Старая версия кэша, сбрасываю");
     }
   } catch (e) {
     console.warn("[coords] Не удалось прочитать кэш:", e);
   }
-  const fresh: CoordsStore = { version: COORDS_VERSION, coords: {} };
+  const fresh: CoordsStore = {
+    version: COORDS_VERSION,
+    coords: {},
+    failed: {},
+  };
   cache = fresh;
   return fresh;
 }
@@ -65,20 +70,22 @@ function persist(): void {
 }
 
 /**
- * Есть ли актуальная запись о координатах.
- * null считается валидным только пока не устарел (RETRY_NULL_MS).
+ * Есть ли запись о координатах.
+ * - Успешные — true навсегда.
+ * - Неудачные — true, пока не прошло RETRY_NULL_MS.
  */
 export function hasEventCoords(eventId: number | string): boolean {
   const store = load();
-  const entry = store.coords[String(eventId)];
-  if (!entry) return false;
-  if (entry.v) return true;
-  return Date.now() - entry.ts < RETRY_NULL_MS;
+  const key = String(eventId);
+  if (key in store.coords) return true;
+  const failedAt = store.failed[key];
+  if (failedAt === undefined) return false;
+  return Date.now() - failedAt < RETRY_NULL_MS;
 }
 
 export function getEventCoords(eventId: number | string): Coords | null {
   const store = load();
-  return store.coords[String(eventId)]?.v ?? null;
+  return store.coords[String(eventId)] ?? null;
 }
 
 export function setEventCoords(
@@ -86,13 +93,17 @@ export function setEventCoords(
   coords: Coords | null,
 ): void {
   const store = load();
-  store.coords[String(eventId)] = { v: coords, ts: Date.now() };
+  const key = String(eventId);
+  if (coords) {
+    store.coords[key] = coords;
+    delete store.failed[key];
+  } else {
+    store.failed[key] = Date.now();
+  }
   persist();
 }
 
 export function getCoordsCount(): number {
   const store = load();
-  let n = 0;
-  for (const v of Object.values(store.coords)) if (v.v) n++;
-  return n;
+  return Object.keys(store.coords).length;
 }

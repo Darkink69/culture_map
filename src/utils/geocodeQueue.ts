@@ -1,3 +1,5 @@
+// geocodeQueue.ts
+
 import { hasEventCoords, setEventCoords } from "./coordsCache";
 import { fetchEventCoords } from "./culturePage";
 
@@ -31,7 +33,7 @@ export function setActiveLocale(locale: string | null): void {
   }
 
   activeLocale = locale;
-  stopped = false;
+  // stopped НЕ сбрасываем — иначе stopQueue не работает
   notify();
 
   if (locale) void startWorker();

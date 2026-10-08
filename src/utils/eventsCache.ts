@@ -2,13 +2,12 @@ import type { CultureEvent } from "../types/culture";
 import { compactEvents } from "./compactEvents";
 
 const CACHE_PREFIX = "culture.ru:events:";
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2; // поднимаем — структура событий изменилась
 
-/** 24 часа. */
-export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/** 5 минут. */
+export const CACHE_TTL_MS = 5 * 60 * 1000;
 
-/** Сколько событий оставляем, если не влезло всё. */
-const FALLBACK_EVENTS_LIMIT = 200;
+const FALLBACK_EVENTS_LIMIT = 300;
 
 interface CachePayload {
   version: number;
@@ -67,7 +66,6 @@ export function readCache(locale: string): CacheReadResult | null {
     parsed?.version !== CACHE_VERSION ||
     parsed?.locale !== locale
   ) {
-    console.warn("[cache] Неподходящая структура/версия, игнорирую");
     return null;
   }
 
@@ -108,7 +106,7 @@ export function writeCache(locale: string, events: CultureEvent[]): void {
   } catch (e) {
     if (e instanceof DOMException && e.name === "QuotaExceededError") {
       console.warn(
-        `[cache] ${locale}: квота, обрезаю до ${FALLBACK_EVENTS_LIMIT} событий`,
+        `[cache] ${locale}: квота, обрезаю до ${FALLBACK_EVENTS_LIMIT}`,
       );
       payload.events = compact.slice(0, FALLBACK_EVENTS_LIMIT);
       try {

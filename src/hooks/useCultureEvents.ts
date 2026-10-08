@@ -1,3 +1,4 @@
+// useCultureEvents.ts
 import { useEffect, useRef, useState } from "react";
 import type { CultureEvent, EventsResponse } from "../types/culture";
 import {
@@ -23,13 +24,9 @@ const log = (...a: unknown[]) => console.log(LOG_PREFIX, ...a);
 const logWarn = (...a: unknown[]) => console.warn(LOG_PREFIX, ...a);
 const logError = (...a: unknown[]) => console.error(LOG_PREFIX, ...a);
 
-// ---------------------------------------------------------------------------
-// buildId
-// ---------------------------------------------------------------------------
 const HARDCODED_BUILD_ID = "2Qz5zrof8ZAyDcabqBxog";
 
 async function fetchBuildId(): Promise<string> {
-  // Сначала пробуем получить динамически
   try {
     const res = await fetch(`${BASE}/`, { credentials: "omit" });
     const html = await res.text();
@@ -38,22 +35,11 @@ async function fetchBuildId(): Promise<string> {
     );
     if (m) return m[1];
   } catch (e) {
-    console.warn(
-      "[buildId] Не удалось получить динамически, использую захардкоженный:",
-      e,
-    );
+    console.warn("[buildId] Не удалось получить динамически:", e);
   }
-
-  console.warn(
-    "[buildId] Fallback на захардкоженный buildId:",
-    HARDCODED_BUILD_ID,
-  );
   return HARDCODED_BUILD_ID;
 }
 
-// ---------------------------------------------------------------------------
-// Одна страница афиши
-// ---------------------------------------------------------------------------
 interface PageResult {
   items: CultureEvent[];
   totalPages: number | null;
@@ -96,9 +82,6 @@ async function fetchPage(
   return { items, totalPages };
 }
 
-// ---------------------------------------------------------------------------
-// Очередь координат
-// ---------------------------------------------------------------------------
 function enqueueMissing(events: CultureEvent[], locale: string): number {
   let n = 0;
   for (const ev of events) {
@@ -109,9 +92,6 @@ function enqueueMissing(events: CultureEvent[], locale: string): number {
   return n;
 }
 
-// ---------------------------------------------------------------------------
-// Синглтон на локаль
-// ---------------------------------------------------------------------------
 const inFlight = new Map<string, Promise<CultureEvent[]>>();
 const aborters = new Map<string, AbortController>();
 
@@ -152,7 +132,6 @@ async function loadAllEvents(
             `событий: ${cached.events.length}`,
         );
 
-        // Очередь — до onPartial
         const queued = enqueueMissing(cached.events, locale);
         if (queued > 0)
           log(`"${locale}" в очередь координат из кэша: ${queued}`);
@@ -203,7 +182,8 @@ async function loadAllEvents(
         }
         all.push(...items);
         enqueueMissing(items, locale);
-        // writeCache убран из цикла — пишем один раз в конце
+        // Пишем в кэш после каждой страницы — чтобы прогресс сохранялся
+        writeCache(locale, all);
         onPartial?.([...all]);
         onProgress?.(page, totalPages);
       } catch (e) {
@@ -236,7 +216,6 @@ async function loadAllEvents(
   }
 }
 
-/** Остановить загрузку афиши и очередь координат. */
 export function stopAll(locale: string | null): void {
   if (locale) {
     const ctrl = aborters.get(locale);
@@ -248,9 +227,6 @@ export function stopAll(locale: string | null): void {
   stopQueue();
 }
 
-// ---------------------------------------------------------------------------
-// Хук
-// ---------------------------------------------------------------------------
 interface UseEventsResult {
   events: CultureEvent[];
   loading: boolean;
@@ -283,19 +259,16 @@ export function useCultureEvents(
   useEffect(() => {
     mountedRef.current = true;
 
-    // ------- Смена локали: останавливаем всё старое -------
     const prev = prevLocaleRef.current;
     if (prev !== locale) {
       if (prev) {
         console.log(`[hook] Локаль сменилась: ${prev} → ${locale}`);
-        // 1. Отменяем загрузку афиши прошлой локали
         const ctrl = aborters.get(prev);
         if (ctrl) {
           console.log(`[hook] Abort афиши "${prev}"`);
           ctrl.abort();
         }
       }
-      // 2. Переключаем очередь координат: старые каналы стираются
       setActiveLocale(locale);
       prevLocaleRef.current = locale;
     }
@@ -329,7 +302,6 @@ export function useCultureEvents(
       maxPages,
       onPartial: (partial) => {
         if (!mountedRef.current) return;
-        // защита от гонки: игнорируем колбэки от неактуальной локали
         if (prevLocaleRef.current !== locale) return;
         setEvents(partial);
         setFromCache(false);
@@ -354,10 +326,7 @@ export function useCultureEvents(
       })
       .catch((err) => {
         if (!mountedRef.current) return;
-        if (err instanceof Error && err.name === "AbortError") {
-          // отмена из-за смены локали — не показываем ошибку
-          return;
-        }
+        if (err instanceof Error && err.name === "AbortError") return;
         if (prevLocaleRef.current !== locale) return;
         logError("Ошибка:", err);
         setError(err instanceof Error ? err.message : "Неизвестная ошибка");
