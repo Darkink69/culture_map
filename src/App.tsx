@@ -8,7 +8,7 @@ import Splash from "./components/Splash";
 import HintPopup from "./components/HintPopup";
 import { useGeolocation } from "./hooks/useGeolocation";
 import { useMapLocale } from "./hooks/useMapLocale";
-import { useCultureEvents } from "./hooks/useCultureEvents";
+import { useAggregatedEvents } from "./hooks/useAggregatedEvents";
 import { CATEGORY_CONFIG } from "./utils/eventCategory";
 import type { CultureEvent } from "./types/culture";
 import { detectLocaleByCoords } from "./utils/detectLocale";
@@ -27,7 +27,7 @@ export default function App() {
     refresh,
     stop,
     stopped,
-  } = useCultureEvents(mapLocale.locale?.sysName ?? null);
+  } = useAggregatedEvents(mapLocale.locale?.sysName ?? null);
 
   const [selected, setSelected] = useState<CultureEvent | null>(null);
   const [autoCenter, setAutoCenter] = useState(true);

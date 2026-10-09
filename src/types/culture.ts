@@ -29,6 +29,9 @@ export interface CulturePlace {
   };
 }
 
+/** Источник события. */
+export type EventSource = "culture" | "gde-chto" | "local";
+
 export interface CultureEvent {
   _id: number;
   title: string;
@@ -42,6 +45,36 @@ export interface CultureEvent {
   thumbnailFile?: CultureThumbnailFile;
   places?: CulturePlace[];
   topPlaceTitle?: string;
+
+  // --- Мультиисточниковые поля ---
+
+  /** Источник события. Если не задан — "culture". */
+  source?: EventSource;
+
+  /** Прямая ссылка на картинку (для local и gde-chto). */
+  imageUrl?: string;
+
+  /** Ссылка на страницу события во внешнем источнике. */
+  externalUrl?: string;
+
+  /** Описание (для gde-chto и local). У culture — нет, там своя логика. */
+  description?: string;
+
+  /** Дата начала в ISO (для gde-chto). */
+  dateFrom?: string;
+
+  /** Дополнительные поля gde-chto, которые могут понадобиться в модалке. */
+  gdeChto?: {
+    place?: string;
+    address?: string;
+    site?: string;
+    phone?: string;
+    startTime?: string;
+    endTime?: string;
+    textDate?: string;
+    textTime?: string;
+    entranceFree?: boolean;
+  };
 }
 
 export interface CultureRecommendation {
@@ -52,8 +85,8 @@ export interface CultureRecommendation {
 }
 
 export interface EventsPagination {
-  total: number; // общее количество СТРАНИЦ
-  current: number; // текущая страница
+  total: number;
+  current: number;
 }
 
 export interface EventsPage {

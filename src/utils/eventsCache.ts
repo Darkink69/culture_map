@@ -4,8 +4,8 @@ import { compactEvents } from "./compactEvents";
 const CACHE_PREFIX = "culture.ru:events:";
 const CACHE_VERSION = 2; // поднимаем — структура событий изменилась
 
-/** 5 минут. */
-export const CACHE_TTL_MS = 5 * 60 * 1000;
+/** 24 часа */
+export const CACHE_TTL_MS = 60 * 60 * 24 * 1000;
 
 const FALLBACK_EVENTS_LIMIT = 300;
 

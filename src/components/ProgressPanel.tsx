@@ -49,9 +49,13 @@ function computeStatus(
   localeTitle: string | null,
 ): StatusInfo {
   const label = localeTitle ? `События ${localeTitle}` : "События";
-  const total = events.length;
   let resolved = 0;
-  for (const e of events) if (hasEventCoords(e._id)) resolved++;
+  const cultureEvents = events.filter(
+    (e) => (e.source ?? "culture") === "culture",
+  );
+  const total = cultureEvents.length;
+
+  for (const e of cultureEvents) if (hasEventCoords(e._id)) resolved++;
 
   if (error) {
     return { percent: 0, statusText: `Ошибка: ${error}`, tone: "error" };

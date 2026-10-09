@@ -68,7 +68,10 @@ async function fetchPage(
   const events = json?.pageProps?.events;
   if (!events) throw new Error(`Афиша стр. ${page}: нет pageProps.events`);
 
-  const items = events.items ?? [];
+  const items = (events.items ?? []).map((e) => ({
+    ...e,
+    source: "culture" as const,
+  }));
   const totalPages =
     typeof events.pagination?.total === "number"
       ? events.pagination.total

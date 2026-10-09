@@ -41,6 +41,20 @@ interface Props {
   onSelect: (e: CultureEvent) => void;
 }
 
+/**
+ * Для culture-событий координаты берём из coordsCache (асинхронная загрузка).
+ * Для local и gde-chto — прямо из event.places[0].location.coordinates.
+ */
+function getCoordsForEvent(event: CultureEvent): [number, number] | null {
+  const source = event.source ?? "culture";
+  if (source !== "culture") {
+    const c = event.places?.[0]?.location?.coordinates;
+    if (c && c.length === 2) return [c[0], c[1]]; // [lng, lat]
+    return null;
+  }
+  return getEventCoords(event._id); // [lng, lat]
+}
+
 export default function EventMarkers({ events, onSelect }: Props) {
   const [, forceUpdate] = useReducer((x) => x + 1, 0);
   const jitteredRef = useRef<Map<number, [number, number]>>(new Map());
@@ -53,9 +67,9 @@ export default function EventMarkers({ events, onSelect }: Props) {
         next.set(event._id, cached);
         continue;
       }
-      const raw = getEventCoords(event._id); // [lng, lat] из GeoJSON
+      const raw = getCoordsForEvent(event);
       if (!raw) continue;
-      next.set(event._id, jitterCoords(raw)); // [lng, lat]
+      next.set(event._id, jitterCoords(raw));
     }
     jitteredRef.current = next;
   }, [events]);
@@ -65,7 +79,7 @@ export default function EventMarkers({ events, onSelect }: Props) {
       let added = 0;
       for (const event of events) {
         if (jitteredRef.current.has(event._id)) continue;
-        const raw = getEventCoords(event._id);
+        const raw = getCoordsForEvent(event);
         if (!raw) continue;
         jitteredRef.current.set(event._id, jitterCoords(raw));
         added++;
@@ -81,12 +95,11 @@ export default function EventMarkers({ events, onSelect }: Props) {
   let noCoords = 0;
 
   const markers = events.map((event) => {
-    const pos = jitteredRef.current.get(event._id); // [lng, lat]
+    const pos = jitteredRef.current.get(event._id);
     if (!pos) {
       noCoords++;
       return null;
     }
-
     rendered++;
     const category = getEventCategory(event);
     const icon = makeIcon(category);
@@ -94,7 +107,7 @@ export default function EventMarkers({ events, onSelect }: Props) {
     return (
       <Marker
         key={event._id}
-        position={[pos[1], pos[0]]} // ← Leaflet ждёт [lat, lng]
+        position={[pos[1], pos[0]]}
         icon={icon}
         eventHandlers={{ click: () => onSelect(event) }}
       />
