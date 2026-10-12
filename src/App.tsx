@@ -1,15 +1,16 @@
-// App.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MapView from "./components/MapView";
 import EventModal from "./components/EventModal";
 import IdentifyPopup from "./components/IdentifyPopup";
 import ProgressPanel from "./components/ProgressPanel";
 import Splash from "./components/Splash";
 import HintPopup from "./components/HintPopup";
+import SearchButton from "./components/SearchButton";
+import SearchPanel from "./components/SearchPanel";
 import { useGeolocation } from "./hooks/useGeolocation";
 import { useMapLocale } from "./hooks/useMapLocale";
 import { useAggregatedEvents } from "./hooks/useAggregatedEvents";
-import { CATEGORY_CONFIG } from "./utils/eventCategory";
+import { useEventFilters, filterEvents } from "./hooks/useEventFilters";
 import type { CultureEvent } from "./types/culture";
 import { detectLocaleByCoords } from "./utils/detectLocale";
 
@@ -29,6 +30,8 @@ export default function App() {
     stopped,
   } = useAggregatedEvents(mapLocale.locale?.sysName ?? null);
 
+  const filterState = useEventFilters();
+
   const [selected, setSelected] = useState<CultureEvent | null>(null);
   const [autoCenter, setAutoCenter] = useState(true);
   const [focusCenter, setFocusCenter] = useState<[number, number] | null>(null);
@@ -38,10 +41,24 @@ export default function App() {
     sameLocale: boolean;
   } | null>(null);
 
-  // Клик по карте: открываем identify-попап.
-  // Смена локали — через кнопку внутри попапа.
+  const [debug] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("debug") === "1";
+  });
+
+  // Применённые фильтры — то, что реально видно на карте
+  const visibleEvents = useMemo(
+    () => filterEvents(events, filterState.applied),
+    [events, filterState.applied],
+  );
+
+  // Сколько совпадёт, если нажать «Показать события» прямо сейчас
+  const previewCount = useMemo(
+    () => filterEvents(events, filterState.filters).length,
+    [events, filterState.filters],
+  );
+
   const handleMapClick = async (lat: number, lng: number) => {
-    // Определяем локаль точки, чтобы понять, совпадает ли она с текущей
     const currentSys = mapLocale.locale?.sysName ?? null;
     let sameLocale = true;
     try {
@@ -49,8 +66,6 @@ export default function App() {
       const clickedSys = res.locale?.sysName ?? null;
       sameLocale = currentSys !== null && clickedSys === currentSys;
     } catch {
-      // если не определилось — считаем, что локаль другая,
-      // чтобы не потерять возможность переключиться
       sameLocale = false;
     }
     setIdentifyPoint({ lat, lng, sameLocale });
@@ -63,11 +78,6 @@ export default function App() {
     await mapLocale.setLocaleByCoords(lat, lng);
     setIdentifyPoint(null);
   };
-
-  const [debug] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("debug") === "1";
-  });
 
   useEffect(() => {
     if (mapLocale.userLat && mapLocale.userLng && autoCenter) {
@@ -88,7 +98,7 @@ export default function App() {
     <div className="relative h-screen w-screen overflow-hidden">
       <MapView
         location={location}
-        events={events}
+        events={visibleEvents}
         onSelectEvent={(e) => {
           setIdentifyPoint(null);
           setSelected(e);
@@ -124,6 +134,11 @@ export default function App() {
         </div>
       )}
 
+      <SearchButton
+        onClick={() => filterState.open()}
+        active={filterState.isOpen || filterState.hasActiveFilter}
+      />
+
       <button
         onClick={() => {
           setAutoCenter(true);
@@ -148,20 +163,24 @@ export default function App() {
         </svg>
       </button>
 
-      <div className="absolute bottom-6 left-6 z-1000 bg-white/95 backdrop-blur-sm shadow-lg rounded-lg px-3 py-2 text-xs">
-        <div className="font-semibold mb-1 text-gray-700">Типы событий</div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-          {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
-            <div key={key} className="flex items-center gap-1.5 text-gray-700">
-              <span
-                className="inline-block w-3 h-3 rounded-full"
-                style={{ background: cfg.color }}
-              />
-              {cfg.label}
-            </div>
-          ))}
-        </div>
-      </div>
+      {filterState.isOpen && (
+        <SearchPanel
+          filters={filterState.filters}
+          onQueryChange={filterState.setQuery}
+          onToggleCategory={filterState.toggleCategory}
+          onDateChange={(from, to) => {
+            filterState.setDateFrom(from);
+            filterState.setDateTo(to);
+          }}
+          onClearDate={filterState.clearDate}
+          onApply={filterState.apply}
+          onClose={() => {
+            filterState.close();
+            filterState.reset();
+          }}
+          matchedCount={previewCount}
+        />
+      )}
 
       <EventModal event={selected} onClose={() => setSelected(null)} />
 
