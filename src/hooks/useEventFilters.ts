@@ -3,14 +3,12 @@ import type { CultureEvent } from "../types/culture";
 import type { EventCategory } from "../utils/eventCategory";
 import { getEventCategory } from "../utils/eventCategory";
 import { eventSearchText, matchesQuery } from "../utils/textSearch";
+import { todayIso } from "../utils/dateHelpers";
 
 export interface EventFilters {
   query: string;
-  /** Исключённые категории. Пустой Set = все включены. */
   excludedCategories: Set<EventCategory>;
-  /** Начало периода (включительно), ISO или null. */
   dateFrom: string | null;
-  /** Конец периода (включительно), ISO или null. */
   dateTo: string | null;
 }
 
@@ -21,45 +19,51 @@ export const EMPTY_FILTERS: EventFilters = {
   dateTo: null,
 };
 
+/**
+ * Возвращает [start, end] активности события в ISO (YYYY-MM-DD).
+ * - culture: [сегодня, seanceEndDate]
+ * - gde-chto: [dateFrom, seanceEndDate]
+ * - local: [dateFrom ?? сегодня, seanceEndDate]
+ * null означает «не знаем».
+ */
 function getEventDateRange(event: CultureEvent): {
-  start: number | null;
-  end: number | null;
+  start: string | null;
+  end: string | null;
 } {
-  // culture: только seanceEndDate
-  if ((event.source ?? "culture") === "culture") {
-    const end = event.seanceEndDate ? Date.parse(event.seanceEndDate) : null;
-    return { start: end, end };
+  const src = event.source ?? "culture";
+
+  const endIso = event.seanceEndDate ? event.seanceEndDate.slice(0, 10) : null;
+
+  if (src === "gde-chto") {
+    const startIso = event.dateFrom ? event.dateFrom.slice(0, 10) : null;
+    return { start: startIso, end: endIso };
   }
-  // gde-chto: dateFrom + seanceEndDate
-  if (event.source === "gde-chto") {
-    const start = event.dateFrom ? Date.parse(event.dateFrom) : null;
-    const end = event.seanceEndDate ? Date.parse(event.seanceEndDate) : null;
-    return { start, end };
-  }
-  // local: только seanceEndDate (если есть)
-  const end = event.seanceEndDate ? Date.parse(event.seanceEndDate) : null;
-  return { start: end, end };
+
+  // culture и local: если нет dateFrom — считаем, что событие активно с сегодня
+  const startIso = event.dateFrom ? event.dateFrom.slice(0, 10) : todayIso();
+
+  return { start: startIso, end: endIso };
 }
 
 function isInDateRange(
   event: CultureEvent,
-  fromTs: number | null,
-  toTs: number | null,
+  fromIso: string | null,
+  toIso: string | null,
 ): boolean {
-  if (fromTs === null && toTs === null) return true;
+  if (fromIso === null && toIso === null) return true;
 
   const { start, end } = getEventDateRange(event);
 
-  // Если у события нет дат — не фильтруем по дате (показываем всегда)
+  // Если у события нет дат вообще — не фильтруем
   if (start === null && end === null) return true;
 
   const s = start ?? end!;
   const e = end ?? start!;
 
-  const lo = fromTs ?? -Infinity;
-  const hi = toTs ?? Infinity;
+  const lo = fromIso ?? "0000-01-01";
+  const hi = toIso ?? "9999-12-31";
 
-  // Пересечение [s, e] с [lo, hi]
+  // Пересечение [s, e] с [lo, hi] — строковое сравнение работает для ISO
   return s <= hi && e >= lo;
 }
 
@@ -68,18 +72,13 @@ export function filterEvents(
   filters: EventFilters,
 ): CultureEvent[] {
   const query = filters.query.trim();
-  const fromTs = filters.dateFrom ? Date.parse(filters.dateFrom) : null;
-  const toTs = filters.dateTo ? Date.parse(filters.dateTo) : null;
 
   return events.filter((event) => {
-    // 1. Категория
     const cat = getEventCategory(event);
     if (filters.excludedCategories.has(cat)) return false;
 
-    // 2. Дата
-    if (!isInDateRange(event, fromTs, toTs)) return false;
+    if (!isInDateRange(event, filters.dateFrom, filters.dateTo)) return false;
 
-    // 3. Текст
     if (query) {
       const text = eventSearchText(event);
       if (!matchesQuery(text, query)) return false;
@@ -94,9 +93,7 @@ export function useEventFilters() {
   const [applied, setApplied] = useState<EventFilters>(EMPTY_FILTERS);
   const [isOpen, setIsOpen] = useState(false);
 
-  const apply = useCallback(() => {
-    setApplied(filters);
-  }, [filters]);
+  const apply = useCallback(() => setApplied(filters), [filters]);
 
   const reset = useCallback(() => {
     setFilters(EMPTY_FILTERS);
@@ -128,14 +125,14 @@ export function useEventFilters() {
     setFilters((f) => ({ ...f, dateFrom: null, dateTo: null }));
   }, []);
 
-  const hasActiveFilter = useMemo(() => {
-    return (
+  const hasActiveFilter = useMemo(
+    () =>
       applied.query.trim() !== "" ||
       applied.excludedCategories.size > 0 ||
       applied.dateFrom !== null ||
-      applied.dateTo !== null
-    );
-  }, [applied]);
+      applied.dateTo !== null,
+    [applied],
+  );
 
   return {
     filters,

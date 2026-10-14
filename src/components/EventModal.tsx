@@ -111,7 +111,7 @@ export default function EventModal({ event, onClose }: Props) {
 
           {event.seanceEndDate && (
             <div className="text-sm text-gray-700">
-              <span className="text-gray-500">Ближайшая дата: </span>
+              <span className="text-gray-500">Дата: </span>
               {new Date(event.seanceEndDate).toLocaleDateString("ru-RU", {
                 day: "numeric",
                 month: "long",

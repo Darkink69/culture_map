@@ -3,7 +3,7 @@ import type { CultureEvent } from "../types/culture";
 export const LOCAL_EVENTS: CultureEvent[] = [
   {
     _id: -1,
-    title: "НГУ",
+    title: "Тестовая точка: НГУ",
     name: "test-ngu",
     isPremiere: false,
     isPushkinsCard: false,
@@ -13,6 +13,8 @@ export const LOCAL_EVENTS: CultureEvent[] = [
     description:
       "Новосибирский национальный исследовательский государственный университет.",
     topPlaceTitle: "Новосибирск, Академгородок",
+    dateFrom: "2026-10-01T00:00:00.000Z",
+    seanceEndDate: "2026-12-31T23:59:59.000Z",
     places: [
       {
         _id: "local-1",
@@ -25,7 +27,7 @@ export const LOCAL_EVENTS: CultureEvent[] = [
   },
   {
     _id: -2,
-    title: "Мышь, вяжущая ДНК",
+    title: "Тестовая точка: Мышь, вяжущая ДНК",
     name: "test-mouse-dna",
     isPremiere: false,
     isPushkinsCard: false,
@@ -34,6 +36,8 @@ export const LOCAL_EVENTS: CultureEvent[] = [
       "https://upload.wikimedia.org/wikipedia/ru/thumb/f/f0/Monument_to_lab_mouse-1.jpg/1280px-Monument_to_lab_mouse-1.jpg",
     description: "Жанровая скульптура в Новосибирском Академгородке",
     topPlaceTitle: "Новосибирск, Академгородок",
+    dateFrom: "2026-10-01T00:00:00.000Z",
+    seanceEndDate: "2026-12-31T23:59:59.000Z",
     places: [
       {
         _id: "local-2",

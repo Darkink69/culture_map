@@ -1,4 +1,3 @@
-/** Возвращает массив дней месяца, включая пустые ячейки для выравнивания. */
 export interface DayCell {
   date: Date | null;
   iso: string | null;
@@ -52,6 +51,11 @@ export function toLocalIso(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+/** ISO-строка начала сегодняшнего дня. */
+export function todayIso(): string {
+  return toLocalIso(new Date());
 }
 
 export const WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
