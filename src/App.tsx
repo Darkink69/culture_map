@@ -154,7 +154,7 @@ export default function App() {
           height="22"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#2563eb"
+          stroke="#6b7c94"
           strokeWidth="2"
         >
           <circle cx="12" cy="12" r="3" />

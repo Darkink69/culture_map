@@ -9,22 +9,43 @@ export type EventCategory =
 export interface CategoryConfig {
   color: string;
   label: string;
-  emoji: string;
+  /** Путь к SVG-иконке в /public/icons */
+  icon: string;
 }
 
 export const CATEGORY_CONFIG: Record<EventCategory, CategoryConfig> = {
-  spektakli: { color: "#e11d48", label: "Спектакли", emoji: "🎭" },
-  kontserti: { color: "#2563eb", label: "Концерты", emoji: "🎵" },
-  vstrechi: { color: "#16a34a", label: "Встречи", emoji: "💬" },
-  obuchenie: { color: "#ca8a04", label: "Обучение", emoji: "🎓" },
-  vystavki: { color: "#9333ea", label: "Выставки", emoji: "🖼️" },
-  other: { color: "#6b7280", label: "Другое", emoji: "⭐" },
+  spektakli: {
+    color: "#8b3a3a",
+    label: "Театр",
+    icon: "/icons/theater.svg",
+  },
+  kontserti: {
+    color: "#2f4a6d",
+    label: "Музыка",
+    icon: "/icons/music.svg",
+  },
+  vstrechi: {
+    color: "#4a6d3a",
+    label: "Встречи",
+    icon: "/icons/meetings.svg",
+  },
+  obuchenie: {
+    color: "#a6893a",
+    label: "Обучение",
+    icon: "/icons/education.svg",
+  },
+  vystavki: {
+    color: "#6d4a6d",
+    label: "Выставки",
+    icon: "/icons/pictures.svg",
+  },
+  other: {
+    color: "#6d6d6d",
+    label: "Другое",
+    icon: "/icons/other.svg",
+  },
 };
 
-/**
- * Маппинг человекочитаемых типов gde-chto (поле type_for_search)
- * на наши категории.
- */
 const GDE_CHTO_MAP: Record<string, EventCategory> = {
   "Спектакль (театр, сценическое искусство, постановка)": "spektakli",
   "Музыка (концерты, фестивали)  ": "kontserti",
@@ -42,16 +63,8 @@ const GDE_CHTO_MAP: Record<string, EventCategory> = {
   "Игра (квесты, квизы, викторины, настолки)": "vstrechi",
   "Шоу (стендап, открытый микрофон, литературные чтения, шоу, перформанс)":
     "spektakli",
-  // Всё остальное (спорт, фитнес, гастрономия, ярмарка, кино, дети, акция,
-  // танцы) — "other"
 };
 
-/**
- * Категория события.
- * - Для culture.ru: genres[0].name (spectakli/kontserti/...)
- * - Для gde-chto: маппинг по genres[0].title (там мы кладём type_for_search)
- * - Для local: genres[0].name = "other" по умолчанию
- */
 export function getEventCategory(event: {
   genres?: { name: string; title?: string }[];
   source?: string;
@@ -59,14 +72,12 @@ export function getEventCategory(event: {
   const g = event.genres?.[0];
   if (!g) return "other";
 
-  // gde-chto: используем title, потому что там лежит type_for_search
   if (event.source === "gde-chto") {
     const mapped = GDE_CHTO_MAP[g.title ?? ""];
     if (mapped) return mapped;
     return "other";
   }
 
-  // culture.ru: name — это ключ категории
   if (g.name && g.name in CATEGORY_CONFIG) return g.name as EventCategory;
   return "other";
 }

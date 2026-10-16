@@ -9,7 +9,7 @@ export default function SearchButton({ onClick, active }: Props) {
       onClick={onClick}
       className={
         "absolute bottom-6 left-6 z-1000 shadow-lg rounded-full w-12 h-12 flex items-center justify-center transition " +
-        (active ? "bg-blue-600 hover:bg-blue-700" : "bg-white hover:bg-gray-50")
+        (active ? "bg-black hover:bg-[#6b7c94]" : "bg-white hover:bg-gray-50")
       }
       title="Поиск событий"
       aria-label="Поиск событий"
@@ -19,7 +19,7 @@ export default function SearchButton({ onClick, active }: Props) {
         height="22"
         viewBox="0 0 24 24"
         fill="none"
-        stroke={active ? "white" : "#2563eb"}
+        stroke={active ? "white" : "#6b7c94"}
         strokeWidth="2"
         strokeLinecap="round"
       >

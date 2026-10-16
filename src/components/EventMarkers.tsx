@@ -12,28 +12,42 @@ const iconCache = new Map<string, L.DivIcon>();
 function makeIcon(category: keyof typeof CATEGORY_CONFIG): L.DivIcon {
   const cached = iconCache.get(category);
   if (cached) return cached;
-  const { color, emoji } = CATEGORY_CONFIG[category];
-  const icon = L.divIcon({
+
+  const { icon } = CATEGORY_CONFIG[category];
+
+  const divIcon = L.divIcon({
     className: "event-marker",
     html: `
       <div style="
-        width: 34px; height: 34px;
-        background: ${color};
-        border: 2.5px solid white;
-        border-radius: 50% 50% 50% 0;
-        transform: rotate(-45deg);
-        display: flex; align-items: center; justify-content: center;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: auto;
+        box-shadow: 0 0 0 .5px #ffffff;
       ">
-        <span style="transform: rotate(45deg); font-size: 16px; line-height: 1;">
-          ${emoji}
-        </span>
-      </div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 34],
+        <img
+          src="${icon}"
+          alt=""
+          style="
+            width: 46px;
+            height: 46px;
+            display: block;
+            border-radius: 50%;
+          "
+        />
+      </div>
+    `,
+    iconSize: [50, 50],
+    iconAnchor: [25, 25],
+    popupAnchor: [0, -25],
   });
-  iconCache.set(category, icon);
-  return icon;
+
+  iconCache.set(category, divIcon);
+  return divIcon;
 }
 
 interface Props {
@@ -41,18 +55,14 @@ interface Props {
   onSelect: (e: CultureEvent) => void;
 }
 
-/**
- * Для culture-событий координаты берём из coordsCache (асинхронная загрузка).
- * Для local и gde-chto — прямо из event.places[0].location.coordinates.
- */
 function getCoordsForEvent(event: CultureEvent): [number, number] | null {
   const source = event.source ?? "culture";
   if (source !== "culture") {
     const c = event.places?.[0]?.location?.coordinates;
-    if (c && c.length === 2) return [c[0], c[1]]; // [lng, lat]
+    if (c && c.length === 2) return [c[0], c[1]];
     return null;
   }
-  return getEventCoords(event._id); // [lng, lat]
+  return getEventCoords(event._id);
 }
 
 export default function EventMarkers({ events, onSelect }: Props) {

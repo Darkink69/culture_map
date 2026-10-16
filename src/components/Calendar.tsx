@@ -1,18 +1,11 @@
-import {
-  buildMonth,
-  MONTHS_RU,
-  WEEKDAYS_SHORT,
-  //   type DayCell,
-} from "../utils/dateHelpers";
+import { buildMonth, MONTHS_RU, WEEKDAYS_SHORT } from "../utils/dateHelpers";
 
 interface Props {
   year: number;
-  month: number; // 0-11
+  month: number;
   today: Date;
-  /** ISO выбранных дат (начало и конец периода). */
   rangeStart: string | null;
   rangeEnd: string | null;
-  /** Клик по дню. */
   onDayClick: (iso: string) => void;
 }
 
@@ -39,19 +32,22 @@ export default function Calendar({
 
   return (
     <div className="select-none">
-      <div className="text-sm font-medium text-gray-800 mb-2 text-center">
+      <div className="razerBold text-sm text-[#3a3226] text-center mb-2">
         {MONTHS_RU[month]} {year}
       </div>
 
-      <div className="grid grid-cols-7 gap-y-1 text-[10px] text-gray-400 mb-1">
+      <div className="grid grid-cols-7 mb-1">
         {WEEKDAYS_SHORT.map((w) => (
-          <div key={w} className="text-center">
+          <div
+            key={w}
+            className="razer text-center text-[9px] text-gray-400 uppercase"
+          >
             {w}
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-y-1">
+      <div className="grid grid-cols-7">
         {cells.map((cell, i) => {
           if (!cell.day) return <div key={i} />;
 
@@ -68,16 +64,16 @@ export default function Calendar({
               disabled={cell.isPast}
               onClick={() => cell.iso && onDayClick(cell.iso)}
               className={
-                "h-8 w-8 mx-auto rounded text-xs transition " +
+                "razer h-6 w-6 mx-auto rounded-full text-[11px] transition flex items-center justify-center " +
                 (cell.isPast
                   ? "text-gray-300 cursor-not-allowed"
                   : isEndpoint
-                    ? "bg-blue-600 text-white font-semibold"
+                    ? "bg-[#8b7355] text-white font-semibold"
                     : inRange
-                      ? "bg-blue-100 text-blue-800"
+                      ? "bg-[#e8ddc8] text-[#3a3226]"
                       : cell.isToday
-                        ? "border border-blue-400 text-blue-700"
-                        : "text-gray-700 hover:bg-gray-100")
+                        ? "bg-[#9ca880] text-white"
+                        : "text-[#3a3226] hover:bg-[#e8ddc8]")
               }
             >
               {cell.day}
